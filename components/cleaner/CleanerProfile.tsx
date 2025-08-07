@@ -57,7 +57,7 @@ const CleanerDetails: React.FC<CleanerDetailsProps> = ({
     client: '',
   });
 
-  const showDialog = () => setVisible(true);
+  // const showDialog = () => setVisible(true);
   const hideDialog = () => setVisible(false);
 
   const getBadgeColor = () => {

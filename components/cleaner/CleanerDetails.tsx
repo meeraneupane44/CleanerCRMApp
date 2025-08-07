@@ -1,22 +1,22 @@
 import {
-    Calendar as CalendarIcon,
-    CheckCircle as CheckCircleIcon,
-    Clock as ClockIcon,
-    MapPin as MapPinIcon,
-    Phone as PhoneIcon,
-    Plus as PlusIcon,
-    Star as StarIcon
+  Calendar as CalendarIcon,
+  CheckCircle as CheckCircleIcon,
+  Clock as ClockIcon,
+  MapPin as MapPinIcon,
+  Phone as PhoneIcon,
+  Plus as PlusIcon,
+  Star as StarIcon
 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 interface JobHistory {
@@ -98,7 +98,7 @@ const CleanerDetails = ({
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={[styles.container, { backgroundColor: 'white' }]}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Cleaner Details</Text>
@@ -122,6 +122,7 @@ const CleanerDetails = ({
               value={(newJob as any)[field]}
               onChangeText={(text) => setNewJob({ ...newJob, [field]: text })}
               style={styles.input}
+              placeholderTextColor="#666"
             />
           ))}
           <TouchableOpacity onPress={handleAssignJob} style={styles.modalBtn}>
@@ -195,31 +196,31 @@ export default CleanerDetails;
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 22, fontWeight: 'bold' },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#111' },
   assignBtn: { flexDirection: 'row', backgroundColor: '#e0f2fe', padding: 8, borderRadius: 8, alignItems: 'center' },
-  assignText: { marginLeft: 6 },
+  assignText: { marginLeft: 6, color: '#111' },
   card: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginVertical: 10 },
   avatar: { width: 80, height: 80, borderRadius: 40, alignSelf: 'center', marginBottom: 10 },
-  name: { fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
+  name: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', color: '#111' },
   ratingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginVertical: 4 },
   ratingText: { marginLeft: 6, color: '#666' },
   badge: { padding: 6, borderRadius: 6, alignSelf: 'center', marginVertical: 4 },
-  badgeText: { fontSize: 12 },
+  badgeText: { fontSize: 12, color: '#111' },
   phone: { textAlign: 'center', color: '#333', marginVertical: 4 },
   joinDate: { textAlign: 'center', fontSize: 12, color: '#666' },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', marginTop: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', marginTop: 12, color: '#111' },
   specialtyList: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   specialtyItem: { backgroundColor: '#f3f4f6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginRight: 6 },
-  specialtyText: { fontSize: 12 },
+  specialtyText: { fontSize: 12, color: '#111' },
   emptyText: { textAlign: 'center', color: '#999', marginTop: 12 },
   jobItem: { borderTopWidth: 1, borderColor: '#e5e7eb', paddingTop: 12, marginTop: 12 },
   jobHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  jobTitle: { fontWeight: 'bold' },
+  jobTitle: { fontWeight: 'bold', color: '#111' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   jobText: { fontSize: 13, color: '#444', marginTop: 2 },
-  modalContainer: { padding: 20 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 16 },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 10, borderRadius: 6 },
+  modalContainer: { padding: 20, backgroundColor: 'white' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 16, color: '#111' },
+  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 10, borderRadius: 6, color: '#111' },
   modalBtn: { backgroundColor: '#22c55e', padding: 12, borderRadius: 8, marginTop: 10 },
   modalBtnText: { textAlign: 'center', color: '#fff', fontWeight: 'bold' },
 });

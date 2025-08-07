@@ -1,3 +1,4 @@
+import { router } from 'expo-router'; // ✅ navigation import
 import { CheckCircle, Clock, MapPin, Send } from 'lucide-react-native';
 import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -16,7 +17,6 @@ const JobConfirmationScreen = ({
     beforePhoto: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80',
     afterPhoto: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&q=80',
   },
-  onSubmit = () => {},
   onEdit = () => {},
 }) => {
   const isComplete = jobSummary.tasksCompleted === jobSummary.totalTasks;
@@ -99,15 +99,16 @@ const JobConfirmationScreen = ({
         </View>
       )}
 
-      {/* Action Buttons */}
+      {/* Submit Job Button */}
       <TouchableOpacity
-        onPress={onSubmit}
+        onPress={() => router.replace('/(tabs)/Home')} // ✅ navigate home
         style={styles.submitButton}
       >
         <Send size={18} color="#fff" />
         <Text style={styles.buttonText}>Submit Job Report</Text>
       </TouchableOpacity>
 
+      {/* Edit Button */}
       <TouchableOpacity
         onPress={onEdit}
         style={styles.editButton}
@@ -118,7 +119,9 @@ const JobConfirmationScreen = ({
       {/* Success Message */}
       <View style={styles.successBox}>
         <CheckCircle size={24} color="#16a34a" />
-        <Text style={{ marginTop: 8, color: '#166534' }}>Great work! Your job report is ready to submit.</Text>
+        <Text style={{ marginTop: 8, color: '#166534' }}>
+          Great work! Your job report is ready to submit.
+        </Text>
       </View>
     </ScrollView>
   );

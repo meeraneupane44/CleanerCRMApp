@@ -1,7 +1,23 @@
-import { router } from 'expo-router'; // ✅ navigation import
-import { ArrowLeft, Camera, CheckCircle, Clock, FileText, MapPin } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
+import {
+  ArrowLeft,
+  Camera,
+  CheckCircle,
+  Clock,
+  FileText,
+  MapPin
+} from 'lucide-react-native';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 const tasksSample = [
   { id: '1', name: 'Vacuum all carpets and rugs', completed: false },
@@ -23,8 +39,8 @@ const JobDetailScreen = ({
 }) => {
   const [tasks, setTasks] = useState(tasksSample);
   const [notes, setNotes] = useState('');
-  const [beforePhoto, setBeforePhoto] = useState(false);
-  const [afterPhoto, setAfterPhoto] = useState(false);
+  const [beforePhoto, setBeforePhoto] = useState<string | null>(null);
+  const [afterPhoto, setAfterPhoto] = useState<string | null>(null);
 
   const toggleTask = (taskId: string) => {
     setTasks((prev) =>
@@ -32,6 +48,26 @@ const JobDetailScreen = ({
         task.id === taskId ? { ...task, completed: !task.completed } : task
       )
     );
+  };
+
+  const openCamera = async (type: 'before' | 'after') => {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      alert('Camera access is required.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets?.length > 0) {
+      const uri = result.assets[0].uri;
+      if (type === 'before') setBeforePhoto(uri);
+      else setAfterPhoto(uri);
+    }
   };
 
   const completedCount = tasks.filter((t) => t.completed).length;
@@ -82,19 +118,26 @@ const JobDetailScreen = ({
         <View style={styles.photoRow}>
           <TouchableOpacity
             style={[styles.photoBtn, beforePhoto && styles.photoUploaded]}
-            onPress={() => setBeforePhoto(true)}
+            onPress={() => openCamera('before')}
           >
             <Camera size={16} />
             <Text>{beforePhoto ? 'Before ✓' : 'Before Photo'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.photoBtn, afterPhoto && styles.photoUploaded]}
-            onPress={() => setAfterPhoto(true)}
+            onPress={() => openCamera('after')}
           >
             <Camera size={16} />
             <Text>{afterPhoto ? 'After ✓' : 'After Photo'}</Text>
           </TouchableOpacity>
         </View>
+
+        {beforePhoto && (
+          <Image source={{ uri: beforePhoto }} style={styles.photoPreview} />
+        )}
+        {afterPhoto && (
+          <Image source={{ uri: afterPhoto }} style={styles.photoPreview} />
+        )}
       </View>
 
       {/* Notes */}
@@ -144,6 +187,7 @@ const styles = StyleSheet.create({
   photoRow: { flexDirection: 'row', justifyContent: 'space-between' },
   photoBtn: { padding: 12, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, alignItems: 'center', width: '48%' },
   photoUploaded: { backgroundColor: '#d1fae5', borderColor: 'green' },
+  photoPreview: { width: '100%', height: 150, borderRadius: 8, marginTop: 10 },
   textArea: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8, textAlignVertical: 'top' },
   completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'green', padding: 14, borderRadius: 6 },
   completeText: { color: '#fff', marginLeft: 8 },
