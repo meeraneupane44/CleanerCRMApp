@@ -1,25 +1,179 @@
-import { router } from 'expo-router'; // ✅ navigation import
+import { router, useLocalSearchParams } from 'expo-router';
 import { CheckCircle, Clock, MapPin, Send } from 'lucide-react-native';
-import React from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
-const JobConfirmationScreen = ({
-  jobSummary = {
-    jobId: 'job1',
-    clientName: 'Sarah Johnson',
-    address: '123 Oak Street, Dallas, TX 75201',
-    checkInTime: '10:05 AM',
-    checkOutTime: '12:15 PM',
-    duration: '2h 10m',
-    tasksCompleted: 8,
-    totalTasks: 8,
-    notes: 'Completed all tasks. Kitchen required extra attention due to grease buildup. Client was very satisfied with the results.',
-    beforePhoto: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80',
-    afterPhoto: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&q=80',
-  },
-  onEdit = () => {},
-}) => {
-  const isComplete = jobSummary.tasksCompleted === jobSummary.totalTasks;
+import { fetchJobWithTasks } from '@/lib/jobs';
+import { supabase } from '@/lib/supabase';
+
+const BUCKET = 'photos';          // your Storage bucket id
+const USE_SIGNED_URLS = false;    // set true if bucket is private
+
+type JobRow = {
+  id: string;
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  date: string | null;
+  start_time: string | null;  // 'HH:MM:SS'
+  end_time: string | null;    // 'HH:MM:SS'
+  address: string | null;
+  notes: string | null;
+  client_name?: string | null; // adjust if your schema uses a different field
+};
+
+type TaskRow = {
+  id: string;
+  description: string;
+  is_completed: boolean;
+};
+
+function toDisplayTime(t?: string | null) {
+  if (!t) return '—';
+  const [hh, mm] = t.split(':');
+  const d = new Date();
+  d.setHours(Number(hh), Number(mm), 0, 0);
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function diffDuration(start?: string | null, end?: string | null) {
+  if (!start || !end) return '—';
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  const mins = Math.max(0, endMin - startMin);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
+async function storageUrlFromPath(path: string, signed: boolean) {
+  if (signed) {
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) throw error || new Error('Failed to create signed URL');
+    return data.signedUrl;
+  } else {
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+    return data.publicUrl;
+  }
+}
+
+async function fetchBeforeAfterUrls(jobId: string, useSigned = false) {
+  const [beforeRes, afterRes] = await Promise.all([
+    supabase
+      .from('photos')
+      .select('image_url, created_at')
+      .eq('job_id', jobId)
+      .eq('type', 'before')
+      .order('created_at', { ascending: false })
+      .limit(1),
+    supabase
+      .from('photos')
+      .select('image_url, created_at')
+      .eq('job_id', jobId)
+      .eq('type', 'after')
+      .order('created_at', { ascending: false })
+      .limit(1),
+  ]);
+  if (beforeRes.error) throw beforeRes.error;
+  if (afterRes.error) throw afterRes.error;
+
+  const beforePath = beforeRes.data?.[0]?.image_url ?? null;
+  const afterPath  = afterRes.data?.[0]?.image_url ?? null;
+
+  const [beforeUrl, afterUrl] = await Promise.all([
+    beforePath ? storageUrlFromPath(beforePath, useSigned) : Promise.resolve(null),
+    afterPath  ? storageUrlFromPath(afterPath,  useSigned) : Promise.resolve(null),
+  ]);
+
+  return { beforeUrl, afterUrl };
+}
+
+export default function JobConfirmation() {
+  const { jobId } = useLocalSearchParams<{ jobId: string }>();
+
+  const [job, setJob] = useState<JobRow | null>(null);
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorText, setErrorText] = useState<string | null>(null);
+
+  const [beforeUrl, setBeforeUrl] = useState<string | null>(null);
+  const [afterUrl, setAfterUrl] = useState<string | null>(null);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setErrorText(null);
+
+        const { job, tasks } = await fetchJobWithTasks(jobId);
+        if (cancelled) return;
+
+        setJob(job as JobRow);
+        setTasks((tasks as TaskRow[]) ?? []);
+
+        setLoadingPhotos(true);
+        const { beforeUrl, afterUrl } = await fetchBeforeAfterUrls(jobId, USE_SIGNED_URLS);
+        if (!cancelled) {
+          setBeforeUrl(beforeUrl);
+          setAfterUrl(afterUrl);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          console.error('[JobConfirmation] load error', e);
+          setErrorText(e?.message ?? 'Failed to load job summary');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setLoadingPhotos(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [jobId]);
+
+  const tasksCompleted = useMemo(() => tasks.filter(t => t.is_completed).length, [tasks]);
+  const totalTasks = tasks.length;
+
+  const clientName = job?.client_name ?? '—';
+  const address = job?.address ?? '—';
+  const checkInTime  = toDisplayTime(job?.start_time);
+  const checkOutTime = toDisplayTime(job?.end_time);
+  const duration = diffDuration(job?.start_time, job?.end_time);
+  const notes = job?.notes ?? '';
+
+  if (loading) {
+    return (
+      <View style={{ padding: 16 }}>
+        <ActivityIndicator />
+        <Text style={{ marginTop: 8 }}>Loading job…</Text>
+      </View>
+    );
+  }
+  if (errorText || !job) {
+    return (
+      <View style={{ padding: 16 }}>
+        <Text style={{ color: 'tomato', marginBottom: 8 }}>{errorText ?? 'Job not found.'}</Text>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/Home')} style={styles.submitButton}>
+          <Text style={styles.buttonText}>Back to Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const isComplete = tasksCompleted === totalTasks;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -37,15 +191,15 @@ const JobConfirmationScreen = ({
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>Job Summary</Text>
           <Text style={[styles.badge, isComplete && styles.badgeGreen]}>
-            {jobSummary.tasksCompleted}/{jobSummary.totalTasks} Tasks
+            {tasksCompleted}/{totalTasks} Tasks
           </Text>
         </View>
 
         <View style={styles.row}>
           <MapPin size={16} />
           <View style={{ marginLeft: 8 }}>
-            <Text style={styles.bold}>{jobSummary.clientName}</Text>
-            <Text>{jobSummary.address}</Text>
+            <Text style={styles.bold}>{clientName}</Text>
+            <Text>{address}</Text>
           </View>
         </View>
 
@@ -53,81 +207,75 @@ const JobConfirmationScreen = ({
           <View style={styles.statBox}>
             <Clock size={16} color="green" />
             <Text style={styles.statLabel}>Check In</Text>
-            <Text style={styles.statValue}>{jobSummary.checkInTime}</Text>
+            <Text style={styles.statValue}>{checkInTime}</Text>
           </View>
           <View style={styles.statBox}>
             <Clock size={16} color="red" />
             <Text style={styles.statLabel}>Check Out</Text>
-            <Text style={styles.statValue}>{jobSummary.checkOutTime}</Text>
+            <Text style={styles.statValue}>{checkOutTime}</Text>
           </View>
           <View style={styles.statBox}>
             <CheckCircle size={16} color="blue" />
             <Text style={styles.statLabel}>Duration</Text>
-            <Text style={styles.statValue}>{jobSummary.duration}</Text>
+            <Text style={styles.statValue}>{duration}</Text>
           </View>
         </View>
       </View>
 
       {/* Photos */}
-      {(jobSummary.beforePhoto || jobSummary.afterPhoto) && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Photos</Text>
-          <View style={styles.grid}>
-            {jobSummary.beforePhoto && (
-              <View>
-                <Text>Before</Text>
-                <Image style={styles.photo} source={{ uri: jobSummary.beforePhoto }} />
-              </View>
-            )}
-            {jobSummary.afterPhoto && (
-              <View>
-                <Text>After</Text>
-                <Image style={styles.photo} source={{ uri: jobSummary.afterPhoto }} />
-              </View>
-            )}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Photos</Text>
+
+        {loadingPhotos && (
+          <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+            <ActivityIndicator />
+            <Text style={{ marginTop: 6, color: '#666' }}>Loading photos…</Text>
           </View>
-        </View>
-      )}
+        )}
+
+        {!loadingPhotos && (
+          <View style={styles.grid}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text>Before</Text>
+              {beforeUrl ? (
+                <Image style={styles.photo} source={{ uri: beforeUrl }} />
+              ) : (
+                <Text style={{ color: '#888', marginTop: 8 }}>No before photo</Text>
+              )}
+            </View>
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text>After</Text>
+              {afterUrl ? (
+                <Image style={styles.photo} source={{ uri: afterUrl }} />
+              ) : (
+                <Text style={{ color: '#888', marginTop: 8 }}>No after photo</Text>
+              )}
+            </View>
+          </View>
+        )}
+      </View>
 
       {/* Notes */}
-      {jobSummary.notes && (
+      {!!notes && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Notes</Text>
           <View style={styles.noteBox}>
-            <Text>{jobSummary.notes}</Text>
+            <Text>{notes}</Text>
           </View>
         </View>
       )}
 
       {/* Submit Job Button */}
       <TouchableOpacity
-        onPress={() => router.replace('/(tabs)/Home')} // ✅ navigate home
+        onPress={() => router.replace('/(tabs)/Home')}
         style={styles.submitButton}
       >
         <Send size={18} color="#fff" />
         <Text style={styles.buttonText}>Submit Job Report</Text>
       </TouchableOpacity>
-
-      {/* Edit Button */}
-      <TouchableOpacity
-        onPress={onEdit}
-        style={styles.editButton}
-      >
-        <Text>Edit Details</Text>
-      </TouchableOpacity>
-
-      {/* Success Message */}
-      <View style={styles.successBox}>
-        <CheckCircle size={24} color="#16a34a" />
-        <Text style={{ marginTop: 8, color: '#166534' }}>
-          Great work! Your job report is ready to submit.
-        </Text>
-      </View>
     </ScrollView>
   );
-};
-
-export default JobConfirmationScreen;
+}
 
 const styles = StyleSheet.create({
   container: { padding: 16, backgroundColor: '#f9f9f9' },
@@ -146,10 +294,8 @@ const styles = StyleSheet.create({
   statBox: { alignItems: 'center', flex: 1 },
   statLabel: { fontSize: 10, color: '#888' },
   statValue: { fontSize: 12, fontWeight: 'bold' },
-  photo: { width: 150, height: 150, borderRadius: 8, marginTop: 8 },
+  photo: { width: '100%', height: 150, borderRadius: 8, marginTop: 8, backgroundColor: '#eee' },
   noteBox: { backgroundColor: '#f1f5f9', padding: 10, borderRadius: 8 },
   submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#16a34a', padding: 12, borderRadius: 8, marginBottom: 12 },
-  editButton: { alignItems: 'center', padding: 10, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginBottom: 20 },
   buttonText: { color: '#fff', marginLeft: 8 },
-  successBox: { backgroundColor: '#dcfce7', padding: 16, borderRadius: 8, alignItems: 'center' },
 });

@@ -18,31 +18,27 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
         tabBarStyle: Platform.select({
-          ios: {
-            backgroundColor: 'transparent',
-          },
+          ios: { backgroundColor: 'transparent' },
         }),
       }}
     >
-     <Tabs.Screen
-     name="cleaner-details"
-     options={{
-    title: 'cleaner-details',
-    tabBarIcon: ({ color }) => (
-      <IconSymbol name="house" color={color} /> // ✅ instead of "home"
-    ),
-  }}
-/>
+      {/* Must match /app/(tabs)/Home.tsx */}
+      <Tabs.Screen
+        name="Home"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color }) => <IconSymbol name="house.fill" color={color} />,
+        }}
+      />
 
-<Tabs.Screen
-  name="profile"
-  options={{
-    title: 'Profile',
-    tabBarIcon: ({ color }) => (
-      <IconSymbol name="person" color={color} /> // ✅ instead of "user"
-    ),
-  }}
-/>
+      {/* Must match /app/(tabs)/profile.tsx */}
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <IconSymbol name="person.circle" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }
