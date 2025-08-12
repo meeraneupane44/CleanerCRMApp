@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
-    FlatList,
     Image,
     Modal,
     Pressable,
@@ -19,20 +18,18 @@ type PhotoRow = {
   type: 'before' | 'after';
   created_at: string;
 };
-
 type GalleryItem = {
   path: string;
   url: string;
   type: 'before' | 'after';
   created_at: string;
 };
-
 type Props = {
   jobId: string;
-  bucket?: string;            // default 'photos'
-  useSignedUrls?: boolean;    // default false (public bucket)
-  columns?: number;           // default 3
-  refreshKey?: string | number; // bump to refetch after uploads
+  bucket?: string;             // default 'photos'
+  useSignedUrls?: boolean;     // default false (public bucket)
+  columns?: number;            // default 3
+  refreshKey?: string | number;
 };
 
 const withCB = (url: string) => `${url}${url.includes('?') ? '&' : '?'}cb=${Date.now()}`;
@@ -119,7 +116,6 @@ export default function JobPhotoGallery({
       </View>
     );
   }
-
   if (error) {
     return (
       <View style={styles.centerBox}>
@@ -127,36 +123,34 @@ export default function JobPhotoGallery({
       </View>
     );
   }
-
   if (items.length === 0) {
     return <Text style={styles.muted}>No photos yet.</Text>;
   }
 
   return (
     <View>
-      <FlatList
-        data={items}
-        keyExtractor={(_, i) => String(i)}
-        numColumns={columns}
-        columnWrapperStyle={{ gap }}
-        contentContainerStyle={{ gap }}
-        renderItem={({ item, index }) => (
-          <TouchableOpacity onPress={() => openAt(index)} activeOpacity={0.8}>
-            <View style={{ width: thumbSize, height: thumbSize }}>
-              <Image
-                source={{ uri: item.url }}
-                style={{ width: '100%', height: '100%', borderRadius: 8, backgroundColor: '#eee' }}
-                resizeMode="cover"
-              />
-              <View style={styles.pill}>
-                <Text style={styles.pillText}>{item.type}</Text>
-              </View>
+      {/* SIMPLE WRAPPED GRID (no FlatList) */}
+      <View style={[styles.gridWrap, { marginRight: -gap, marginBottom: -gap }]}>
+        {items.map((item, index) => (
+          <TouchableOpacity
+            key={`${item.path}-${index}`}
+            onPress={() => openAt(index)}
+            activeOpacity={0.8}
+            style={{ width: thumbSize, height: thumbSize, marginRight: gap, marginBottom: gap }}
+          >
+            <Image
+              source={{ uri: item.url }}
+              style={{ width: '100%', height: '100%', borderRadius: 8, backgroundColor: '#eee' }}
+              resizeMode="cover"
+            />
+            <View style={styles.pill}>
+              <Text style={styles.pillText}>{item.type}</Text>
             </View>
           </TouchableOpacity>
-        )}
-      />
+        ))}
+      </View>
 
-      {/* LIGHTBOX */}
+      {/* LIGHTBOX (separate root via Modal, FlatList here is OK) */}
       <Modal visible={lightboxOpen} animationType="fade" onRequestClose={() => setLightboxOpen(false)}>
         <View style={styles.lightboxRoot}>
           <View style={styles.lightboxHeader}>
@@ -168,38 +162,38 @@ export default function JobPhotoGallery({
             </Pressable>
           </View>
 
-          <FlatList
-            data={items}
-            keyExtractor={(_, i) => String(i)}
-            horizontal
-            pagingEnabled
-            initialScrollIndex={lightboxIndex}
-            getItemLayout={(_, i) => ({
-              length: Dimensions.get('window').width,
-              offset: Dimensions.get('window').width * i,
-              index: i,
-            })}
-            onMomentumScrollEnd={(e) => {
-              const w = Dimensions.get('window').width;
-              const idx = Math.round(e.nativeEvent.contentOffset.x / w);
-              setLightboxIndex(idx);
-            }}
-            renderItem={({ item }) => (
-              <View style={styles.lightboxSlide}>
-                <Image
-                  source={{ uri: item.url }}
-                  style={styles.lightboxImage}
-                  resizeMode="contain"
-                  onError={(e) => console.warn('lightbox image error', e.nativeEvent)}
-                />
-                <View style={styles.caption}>
-                  <Text style={styles.captionText}>
-                    {item.type} • {new Date(item.created_at).toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-            )}
-          />
+          {/* Use a plain pager-style view to avoid VirtualizedList inside scroll roots */}
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Image
+              source={{ uri: items[lightboxIndex]?.url }}
+              style={styles.lightboxImage}
+              resizeMode="contain"
+            />
+          </View>
+
+          {/* Simple left/right controls (optional) */}
+          <View style={styles.navRow}>
+            <TouchableOpacity
+              onPress={() => setLightboxIndex(i => Math.max(0, i - 1))}
+              disabled={lightboxIndex === 0}
+              style={[styles.navBtn, lightboxIndex === 0 && { opacity: 0.4 }]}
+            >
+              <Text style={styles.navTxt}>Prev</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setLightboxIndex(i => Math.min(items.length - 1, i + 1))}
+              disabled={lightboxIndex === items.length - 1}
+              style={[styles.navBtn, lightboxIndex === items.length - 1 && { opacity: 0.4 }]}
+            >
+              <Text style={styles.navTxt}>Next</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.caption}>
+            <Text style={styles.captionText}>
+              {items[lightboxIndex]?.type} • {new Date(items[lightboxIndex]?.created_at || '').toLocaleString()}
+            </Text>
+          </View>
         </View>
       </Modal>
     </View>
@@ -209,6 +203,7 @@ export default function JobPhotoGallery({
 const styles = StyleSheet.create({
   centerBox: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12 },
   muted: { color: '#777' },
+  gridWrap: { flexDirection: 'row', flexWrap: 'wrap' },
 
   pill: {
     position: 'absolute',
@@ -231,8 +226,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   lightboxTitle: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  lightboxSlide: { width: Dimensions.get('window').width, flex: 1, alignItems: 'center', justifyContent: 'center' },
-  lightboxImage: { width: '100%', height: '80%' },
+  lightboxImage: { width: '100%', height: '70%' },
+  navRow: { position: 'absolute', bottom: 80, width: '100%', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 24 },
+  navBtn: { backgroundColor: 'rgba(255,255,255,0.2)', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 6 },
+  navTxt: { color: '#fff', fontWeight: '600' },
   caption: { position: 'absolute', bottom: 24, width: '100%', alignItems: 'center' },
   captionText: { color: '#fff', opacity: 0.85 },
 });
