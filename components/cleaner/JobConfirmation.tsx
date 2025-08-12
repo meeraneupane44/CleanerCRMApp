@@ -3,7 +3,6 @@ import { CheckCircle, Clock, MapPin, Send } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,10 +11,7 @@ import {
 } from 'react-native';
 
 import { fetchJobWithTasks } from '@/lib/jobs';
-import { supabase } from '@/lib/supabase';
-
-const BUCKET = 'photos';          // your Storage bucket id
-const USE_SIGNED_URLS = false;    // set true if bucket is private
+import JobPhotoGallery from './JobPhotoGallery';
 
 type JobRow = {
   id: string;
@@ -25,14 +21,10 @@ type JobRow = {
   end_time: string | null;    // 'HH:MM:SS'
   address: string | null;
   notes: string | null;
-  client_name?: string | null; // adjust if your schema uses a different field
+  client_name?: string | null;
 };
 
-type TaskRow = {
-  id: string;
-  description: string;
-  is_completed: boolean;
-};
+type TaskRow = { id: string; description: string; is_completed: boolean };
 
 function toDisplayTime(t?: string | null) {
   if (!t) return '—';
@@ -41,61 +33,16 @@ function toDisplayTime(t?: string | null) {
   d.setHours(Number(hh), Number(mm), 0, 0);
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
-
 function diffDuration(start?: string | null, end?: string | null) {
   if (!start || !end) return '—';
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
-  const startMin = sh * 60 + sm;
-  const endMin = eh * 60 + em;
-  const mins = Math.max(0, endMin - startMin);
+  const mins = Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   if (h && m) return `${h}h ${m}m`;
   if (h) return `${h}h`;
   return `${m}m`;
-}
-
-async function storageUrlFromPath(path: string, signed: boolean) {
-  if (signed) {
-    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
-    if (error || !data?.signedUrl) throw error || new Error('Failed to create signed URL');
-    return data.signedUrl;
-  } else {
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-    return data.publicUrl;
-  }
-}
-
-async function fetchBeforeAfterUrls(jobId: string, useSigned = false) {
-  const [beforeRes, afterRes] = await Promise.all([
-    supabase
-      .from('photos')
-      .select('image_url, created_at')
-      .eq('job_id', jobId)
-      .eq('type', 'before')
-      .order('created_at', { ascending: false })
-      .limit(1),
-    supabase
-      .from('photos')
-      .select('image_url, created_at')
-      .eq('job_id', jobId)
-      .eq('type', 'after')
-      .order('created_at', { ascending: false })
-      .limit(1),
-  ]);
-  if (beforeRes.error) throw beforeRes.error;
-  if (afterRes.error) throw afterRes.error;
-
-  const beforePath = beforeRes.data?.[0]?.image_url ?? null;
-  const afterPath  = afterRes.data?.[0]?.image_url ?? null;
-
-  const [beforeUrl, afterUrl] = await Promise.all([
-    beforePath ? storageUrlFromPath(beforePath, useSigned) : Promise.resolve(null),
-    afterPath  ? storageUrlFromPath(afterPath,  useSigned) : Promise.resolve(null),
-  ]);
-
-  return { beforeUrl, afterUrl };
 }
 
 export default function JobConfirmation() {
@@ -105,10 +52,6 @@ export default function JobConfirmation() {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState<string | null>(null);
-
-  const [beforeUrl, setBeforeUrl] = useState<string | null>(null);
-  const [afterUrl, setAfterUrl] = useState<string | null>(null);
-  const [loadingPhotos, setLoadingPhotos] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,23 +65,13 @@ export default function JobConfirmation() {
 
         setJob(job as JobRow);
         setTasks((tasks as TaskRow[]) ?? []);
-
-        setLoadingPhotos(true);
-        const { beforeUrl, afterUrl } = await fetchBeforeAfterUrls(jobId, USE_SIGNED_URLS);
-        if (!cancelled) {
-          setBeforeUrl(beforeUrl);
-          setAfterUrl(afterUrl);
-        }
       } catch (e: any) {
         if (!cancelled) {
           console.error('[JobConfirmation] load error', e);
           setErrorText(e?.message ?? 'Failed to load job summary');
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setLoadingPhotos(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -222,37 +155,17 @@ export default function JobConfirmation() {
         </View>
       </View>
 
-      {/* Photos */}
+      {/* Photos (gallery) */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Photos</Text>
-
-        {loadingPhotos && (
-          <View style={{ paddingVertical: 12, alignItems: 'center' }}>
-            <ActivityIndicator />
-            <Text style={{ marginTop: 6, color: '#666' }}>Loading photos…</Text>
-          </View>
-        )}
-
-        {!loadingPhotos && (
-          <View style={styles.grid}>
-            <View style={{ flex: 1, marginRight: 8 }}>
-              <Text>Before</Text>
-              {beforeUrl ? (
-                <Image style={styles.photo} source={{ uri: beforeUrl }} />
-              ) : (
-                <Text style={{ color: '#888', marginTop: 8 }}>No before photo</Text>
-              )}
-            </View>
-            <View style={{ flex: 1, marginLeft: 8 }}>
-              <Text>After</Text>
-              {afterUrl ? (
-                <Image style={styles.photo} source={{ uri: afterUrl }} />
-              ) : (
-                <Text style={{ color: '#888', marginTop: 8 }}>No after photo</Text>
-              )}
-            </View>
-          </View>
-        )}
+        <View style={{ marginTop: 12 }}>
+          <JobPhotoGallery
+            jobId={jobId}
+            bucket="photos"
+            useSignedUrls={false}  // bucket is public
+            columns={3}
+          />
+        </View>
       </View>
 
       {/* Notes */}
@@ -294,7 +207,6 @@ const styles = StyleSheet.create({
   statBox: { alignItems: 'center', flex: 1 },
   statLabel: { fontSize: 10, color: '#888' },
   statValue: { fontSize: 12, fontWeight: 'bold' },
-  photo: { width: '100%', height: 150, borderRadius: 8, marginTop: 8, backgroundColor: '#eee' },
   noteBox: { backgroundColor: '#f1f5f9', padding: 10, borderRadius: 8 },
   submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#16a34a', padding: 12, borderRadius: 8, marginBottom: 12 },
   buttonText: { color: '#fff', marginLeft: 8 },

@@ -2,11 +2,20 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Camera, CheckCircle, Clock, FileText, MapPin } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 import { toggleTask as toggleTaskDb } from '@/lib/jobProgress';
 import { fetchJobWithTasks } from '@/lib/jobs';
 import { uploadJobPhoto } from '@/lib/uploadImage';
+import JobPhotoGallery from './JobPhotoGallery';
 
 type TaskRow = { id: string; description: string; is_completed: boolean };
 type JobRow = {
@@ -28,9 +37,10 @@ export default function JobDetailScreen() {
   const [loading, setLoading] = useState(true);
 
   const [notes, setNotes] = useState('');
-  const [beforePhotoUrl, setBeforePhotoUrl] = useState<string | null>(null);
-  const [afterPhotoUrl, setAfterPhotoUrl] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState<'before' | 'after' | null>(null);
+  const [hasBefore, setHasBefore] = useState(false);
+  const [hasAfter, setHasAfter] = useState(false);
+  const [galleryRefreshKey, setGalleryRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!jobId) return;
@@ -71,15 +81,24 @@ export default function JobDetailScreen() {
 
     try {
       setPhotoUploading(type);
-      const uri = result.assets[0].uri;
+      const localUri = result.assets[0].uri;
+
       const { renderUrl } = await uploadJobPhoto({
         jobId,
-        uri,
+        uri: localUri,
         kind: type,
-        wantSignedUrl: false, // flip to true if bucket is private
+        wantSignedUrl: false, // bucket is public
       });
-      if (type === 'before') setBeforePhotoUrl(renderUrl);
-      else setAfterPhotoUrl(renderUrl);
+
+      // mark presence so Complete button can enable
+      if (type === 'before') setHasBefore(true);
+      else setHasAfter(true);
+
+      // trigger gallery to refetch
+      setGalleryRefreshKey(k => k + 1);
+
+      // optional console for debugging
+      console.log('Uploaded photo URL:', renderUrl);
     } catch (e: any) {
       console.error('Photo upload failed', e);
       Alert.alert('Upload failed', e.message ?? 'Could not upload photo, please try again.');
@@ -91,7 +110,7 @@ export default function JobDetailScreen() {
   const completedCount = useMemo(() => tasks.filter(t => t.is_completed).length, [tasks]);
   const totalCount = tasks.length;
   const canComplete =
-    completedCount === totalCount && !!beforePhotoUrl && !!afterPhotoUrl && !photoUploading;
+    completedCount === totalCount && hasBefore && hasAfter && !photoUploading;
 
   const fmtDate = (d?: string | null) => (d ? new Date(d + 'T00:00:00').toLocaleDateString() : '—');
   const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : '—');
@@ -156,31 +175,38 @@ export default function JobDetailScreen() {
         )}
       </View>
 
-      {/* Photos */}
+      {/* Photos (buttons + gallery) */}
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Photos</Text>
         <View style={styles.photoRow}>
           <TouchableOpacity
-            style={[styles.photoBtn, !!beforePhotoUrl && styles.photoUploaded]}
+            style={[styles.photoBtn, hasBefore && styles.photoUploaded]}
             onPress={() => openCamera('before')}
             disabled={photoUploading === 'before'}
           >
             <Camera size={16} />
-            <Text>{photoUploading === 'before' ? 'Uploading…' : beforePhotoUrl ? 'Before ✓' : 'Before Photo'}</Text>
+            <Text>{photoUploading === 'before' ? 'Uploading…' : hasBefore ? 'Before ✓' : 'Before Photo'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.photoBtn, !!afterPhotoUrl && styles.photoUploaded]}
+            style={[styles.photoBtn, hasAfter && styles.photoUploaded]}
             onPress={() => openCamera('after')}
             disabled={photoUploading === 'after'}
           >
             <Camera size={16} />
-            <Text>{photoUploading === 'after' ? 'Uploading…' : afterPhotoUrl ? 'After ✓' : 'After Photo'}</Text>
+            <Text>{photoUploading === 'after' ? 'Uploading…' : hasAfter ? 'After ✓' : 'After Photo'}</Text>
           </TouchableOpacity>
         </View>
 
-        {beforePhotoUrl && <Image source={{ uri: beforePhotoUrl }} style={styles.photoPreview} />}
-        {afterPhotoUrl && <Image source={{ uri: afterPhotoUrl }} style={styles.photoPreview} />}
+        <View style={{ marginTop: 12 }}>
+          <JobPhotoGallery
+            jobId={jobId}
+            bucket="photos"
+            useSignedUrls={false}
+            columns={3}
+            refreshKey={galleryRefreshKey}
+          />
+        </View>
       </View>
 
       {/* Notes */}
@@ -196,19 +222,18 @@ export default function JobDetailScreen() {
         />
       </View>
 
-      {/* Complete -> type-safe navigation to dynamic route */}
+      {/* Complete -> type-safe nav */}
       <TouchableOpacity
         style={[styles.completeBtn, !canComplete && styles.disabledBtn]}
         disabled={!canComplete}
         onPress={() =>
-          router.push({
-            pathname: '/job-confirmation/[jobId]',
-            params: { jobId }, // ✅ TS-safe
-          })
+          router.push({ pathname: '/job-confirmation/[jobId]', params: { jobId } })
         }
       >
         <CheckCircle size={18} color="#fff" />
-        <Text style={styles.completeText}>{photoUploading ? 'Uploading photos…' : 'Complete Job'}</Text>
+        <Text style={styles.completeText}>
+          {photoUploading ? 'Uploading photos…' : 'Complete Job'}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -233,7 +258,6 @@ const styles = StyleSheet.create({
   photoRow: { flexDirection: 'row', justifyContent: 'space-between' },
   photoBtn: { padding: 12, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, alignItems: 'center', width: '48%' },
   photoUploaded: { backgroundColor: '#d1fae5', borderColor: 'green' },
-  photoPreview: { width: '100%', height: 150, borderRadius: 8, marginTop: 10 },
   textArea: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8, textAlignVertical: 'top' },
   completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'green', padding: 14, borderRadius: 6 },
   completeText: { color: '#fff', marginLeft: 8 },
