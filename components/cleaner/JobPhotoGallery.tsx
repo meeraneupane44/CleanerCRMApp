@@ -5,6 +5,7 @@ import {
     ActivityIndicator,
     Dimensions,
     Image,
+    LayoutChangeEvent,
     Modal,
     Pressable,
     StyleSheet,
@@ -13,22 +14,15 @@ import {
     View,
 } from 'react-native';
 
-type PhotoRow = {
-  image_url: string;    // storage path
-  type: 'before' | 'after';
-  created_at: string;
-};
-type GalleryItem = {
-  path: string;
-  url: string;
-  type: 'before' | 'after';
-  created_at: string;
-};
+type PhotoRow = { image_url: string; type: 'before' | 'after'; created_at: string; };
+type GalleryItem = { path: string; url: string; type: 'before' | 'after'; created_at: string; };
+
 type Props = {
   jobId: string;
-  bucket?: string;             // default 'photos'
-  useSignedUrls?: boolean;     // default false (public bucket)
-  columns?: number;            // default 3
+  bucket?: string;           // default 'photos'
+  useSignedUrls?: boolean;   // default false (public bucket)
+  columns?: number;          // default 3
+  gap?: number;              // default 8
   refreshKey?: string | number;
 };
 
@@ -49,6 +43,7 @@ export default function JobPhotoGallery({
   bucket = 'photos',
   useSignedUrls = false,
   columns = 3,
+  gap = 8,
   refreshKey,
 }: Props) {
   const [loading, setLoading] = useState(true);
@@ -58,14 +53,18 @@ export default function JobPhotoGallery({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
-  const gap = 8;
-  const screenW = Dimensions.get('window').width;
-  const horizontalPadding = 16; // match your card/container padding
+  const [containerW, setContainerW] = useState<number>(0);
+
   const thumbSize = useMemo(() => {
+    const w = containerW || Dimensions.get('window').width - 32; // fallback guess
     const totalGaps = gap * (columns - 1);
-    const available = screenW - horizontalPadding * 2 - totalGaps;
-    return Math.floor(available / columns);
-  }, [screenW, columns]);
+    return Math.floor((w - totalGaps) / columns);
+  }, [containerW, columns, gap]);
+
+  const onLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    if (Math.abs(w - containerW) > 1) setContainerW(w);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -84,7 +83,7 @@ export default function JobPhotoGallery({
 
         const rows = (data as PhotoRow[]) ?? [];
         const urls = await Promise.all(
-          rows.map(async (r) => ({
+          rows.map(async r => ({
             path: r.image_url,
             url: await toDisplayUrl(bucket, r.image_url, useSignedUrls),
             type: r.type,
@@ -99,7 +98,6 @@ export default function JobPhotoGallery({
         if (!cancelled) setLoading(false);
       }
     })();
-
     return () => { cancelled = true; };
   }, [jobId, bucket, useSignedUrls, refreshKey]);
 
@@ -128,8 +126,8 @@ export default function JobPhotoGallery({
   }
 
   return (
-    <View>
-      {/* SIMPLE WRAPPED GRID (no FlatList) */}
+    <View onLayout={onLayout}>
+      {/* Wrapped grid */}
       <View style={[styles.gridWrap, { marginRight: -gap, marginBottom: -gap }]}>
         {items.map((item, index) => (
           <TouchableOpacity
@@ -150,7 +148,7 @@ export default function JobPhotoGallery({
         ))}
       </View>
 
-      {/* LIGHTBOX (separate root via Modal, FlatList here is OK) */}
+      {/* Lightbox */}
       <Modal visible={lightboxOpen} animationType="fade" onRequestClose={() => setLightboxOpen(false)}>
         <View style={styles.lightboxRoot}>
           <View style={styles.lightboxHeader}>
@@ -162,7 +160,6 @@ export default function JobPhotoGallery({
             </Pressable>
           </View>
 
-          {/* Use a plain pager-style view to avoid VirtualizedList inside scroll roots */}
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             <Image
               source={{ uri: items[lightboxIndex]?.url }}
@@ -171,7 +168,6 @@ export default function JobPhotoGallery({
             />
           </View>
 
-          {/* Simple left/right controls (optional) */}
           <View style={styles.navRow}>
             <TouchableOpacity
               onPress={() => setLightboxIndex(i => Math.max(0, i - 1))}

@@ -17,11 +17,13 @@ type JobRow = {
   id: string;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   date: string | null;
-  start_time: string | null;  // 'HH:MM:SS'
-  end_time: string | null;    // 'HH:MM:SS'
+  start_time: string | null;   // planned HH:MM:SS
+  end_time: string | null;     // planned HH:MM:SS
   address: string | null;
   notes: string | null;
   client_name?: string | null;
+  check_in_at?: string | null;   // actual timestamptz (ISO)
+  check_out_at?: string | null;  // actual timestamptz (ISO)
 };
 
 type TaskRow = { id: string; description: string; is_completed: boolean };
@@ -33,7 +35,29 @@ function toDisplayTime(t?: string | null) {
   d.setHours(Number(hh), Number(mm), 0, 0);
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
-function diffDuration(start?: string | null, end?: string | null) {
+
+function fmtTimestamptz(ts?: string | null) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function durationFromTimestamps(checkIn?: string | null, checkOut?: string | null) {
+  if (!checkIn || !checkOut) return '—';
+  const a = new Date(checkIn).getTime();
+  const b = new Date(checkOut).getTime();
+  const diffMs = b - a;
+  if (!isFinite(diffMs) || diffMs <= 0) return '—';
+  const totalMin = Math.floor(diffMs / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
+function durationFromPlanned(start?: string | null, end?: string | null) {
   if (!start || !end) return '—';
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
@@ -59,10 +83,8 @@ export default function JobConfirmation() {
       try {
         setLoading(true);
         setErrorText(null);
-
         const { job, tasks } = await fetchJobWithTasks(jobId);
         if (cancelled) return;
-
         setJob(job as JobRow);
         setTasks((tasks as TaskRow[]) ?? []);
       } catch (e: any) {
@@ -80,11 +102,14 @@ export default function JobConfirmation() {
   const tasksCompleted = useMemo(() => tasks.filter(t => t.is_completed).length, [tasks]);
   const totalTasks = tasks.length;
 
+  // Prefer actual timestamps; fall back to planned times for display only
   const clientName = job?.client_name ?? '—';
   const address = job?.address ?? '—';
-  const checkInTime  = toDisplayTime(job?.start_time);
-  const checkOutTime = toDisplayTime(job?.end_time);
-  const duration = diffDuration(job?.start_time, job?.end_time);
+  const checkInTime  = job?.check_in_at  ? fmtTimestamptz(job.check_in_at)   : toDisplayTime(job?.start_time);
+  const checkOutTime = job?.check_out_at ? fmtTimestamptz(job.check_out_at) : toDisplayTime(job?.end_time);
+  const actualDuration  = durationFromTimestamps(job?.check_in_at, job?.check_out_at);
+  const plannedDuration = durationFromPlanned(job?.start_time, job?.end_time);
+  const duration = actualDuration !== '—' ? actualDuration : plannedDuration;
   const notes = job?.notes ?? '';
 
   if (loading) {
@@ -162,7 +187,7 @@ export default function JobConfirmation() {
           <JobPhotoGallery
             jobId={jobId}
             bucket="photos"
-            useSignedUrls={false}  // bucket is public
+            useSignedUrls={false}
             columns={3}
           />
         </View>
