@@ -11,6 +11,16 @@
     "ios": {
       "supportsTablet": true
     },
+    "expo": {
+    "scheme": "yourapp",           
+    "ios": { "bundleIdentifier": "com.yourco.cleaner" },
+    "android": {
+      "package": "com.yourco.cleaner",
+      "intentFilters": [
+        { "action": "VIEW", "category": ["BROWSABLE", "DEFAULT"], "data": [{ "scheme": "yourapp" }] }
+      ]
+    }
+  },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
