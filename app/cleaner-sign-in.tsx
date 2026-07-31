@@ -1,24 +1,24 @@
-import { supabase } from '@/lib/supabase';
-import { useRouter } from 'expo-router';
-import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react-native';
-import React, { useCallback, useEffect, useState } from 'react';
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "expo-router";
+import { Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react-native";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function CleanerSignInScreen() {
   const router = useRouter();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -26,31 +26,33 @@ export default function CleanerSignInScreen() {
 
   const goHome = useCallback(() => {
     // 🔁 Route into your tabs group
-    router.replace('/(tabs)/Home');
+    router.replace("/(tabs)/Home");
   }, [router]);
 
   const verifyCleanerAndProceed = useCallback(
     async (userId: string) => {
       // Ensure this user is a cleaner
       const { data, error } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', userId)
-        .single();
+        .from("users")
+        .select("role")
+        .eq("id", userId)
+        .maybeSingle(); // 👈 CHANGE THIS FROM .single()
 
       if (error) {
         setAuthError(error.message);
         await supabase.auth.signOut();
         return;
       }
-      if (data?.role !== 'cleaner') {
-        setAuthError('This account is not authorized for the Cleaner app.');
+
+      // If data is null (row doesn't exist) or role isn't cleaner, reject them.
+      if (data?.role !== "cleaner") {
+        setAuthError("This account is not authorized for the Cleaner app.");
         await supabase.auth.signOut();
         return;
       }
       goHome();
     },
-    [goHome]
+    [goHome],
   );
 
   // If already signed in, route straight in (after role check)
@@ -65,10 +67,12 @@ export default function CleanerSignInScreen() {
       }
     })();
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const userId = session?.user?.id;
-      if (userId) await verifyCleanerAndProceed(userId);
-    });
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        const userId = session?.user?.id;
+        if (userId) await verifyCleanerAndProceed(userId);
+      },
+    );
 
     return () => {
       mounted = false;
@@ -79,7 +83,7 @@ export default function CleanerSignInScreen() {
   const onSignIn = async () => {
     setAuthError(null);
     if (!email.trim() || !password) {
-      setAuthError('Email and password are required.');
+      setAuthError("Email and password are required.");
       return;
     }
     setLoading(true);
@@ -95,7 +99,7 @@ export default function CleanerSignInScreen() {
       const userId = data.user?.id;
       if (userId) await verifyCleanerAndProceed(userId);
     } catch (e: any) {
-      setAuthError(e?.message ?? 'Sign-in failed. Please try again.');
+      setAuthError(e?.message ?? "Sign-in failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -104,34 +108,43 @@ export default function CleanerSignInScreen() {
   const onForgotPassword = async () => {
     setAuthError(null);
     if (!email.trim()) {
-      setAuthError('Enter your email above first.');
+      setAuthError("Enter your email above first.");
       return;
     }
     try {
       const redirectTo =
-        process.env.EXPO_PUBLIC_SUPABASE_RESET_REDIRECT_URL || 'yourapp://reset-password';
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo,
-      });
+        process.env.EXPO_PUBLIC_SUPABASE_RESET_REDIRECT_URL ||
+        "yourapp://reset-password";
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        {
+          redirectTo,
+        },
+      );
       if (error) {
         setAuthError(error.message);
         return;
       }
-      setAuthError('Password reset email sent (check your inbox).');
+      setAuthError("Password reset email sent (check your inbox).");
     } catch (e: any) {
-      setAuthError(e?.message ?? 'Could not send reset email.');
+      setAuthError(e?.message ?? "Could not send reset email.");
     }
   };
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.flex}
+      >
         <View style={styles.container}>
           {/* Logo / Title */}
           <View style={styles.header}>
             <Text style={styles.brand}>DFW 20 Cleaners</Text>
             <Text style={styles.title}>Cleaner Sign In</Text>
-            <Text style={styles.subtitle}>Use your cleaner account to continue</Text>
+            <Text style={styles.subtitle}>
+              Use your cleaner account to continue
+            </Text>
           </View>
 
           {/* Email */}
@@ -174,7 +187,10 @@ export default function CleanerSignInScreen() {
 
           {/* Sign In Button */}
           <TouchableOpacity
-            style={[styles.btn, (!email || !password || loading) && styles.btnDisabled]}
+            style={[
+              styles.btn,
+              (!email || !password || loading) && styles.btnDisabled,
+            ]}
             onPress={onSignIn}
             disabled={!email || !password || loading}
             activeOpacity={0.8}
@@ -197,7 +213,9 @@ export default function CleanerSignInScreen() {
           </View>
 
           {/* Footer hint */}
-          <Text style={styles.footerHint}>Only cleaners can access this app.</Text>
+          <Text style={styles.footerHint}>
+            Only cleaners can access this app.
+          </Text>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -205,42 +223,42 @@ export default function CleanerSignInScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
+  safe: { flex: 1, backgroundColor: "#fff" },
   flex: { flex: 1 },
   container: {
     flex: 1,
     padding: 24,
-    justifyContent: 'center',
+    justifyContent: "center",
     gap: 16,
   },
-  header: { marginBottom: 8, alignItems: 'center' },
-  brand: { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 6 },
-  title: { fontSize: 24, fontWeight: '700', color: '#111827' },
-  subtitle: { fontSize: 14, color: '#6B7280', marginTop: 4 },
+  header: { marginBottom: 8, alignItems: "center" },
+  brand: { fontSize: 16, fontWeight: "600", color: "#111827", marginBottom: 6 },
+  title: { fontSize: 24, fontWeight: "700", color: "#111827" },
+  subtitle: { fontSize: 14, color: "#6B7280", marginTop: 4 },
   inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderColor: '#E5E7EB',
+    flexDirection: "row",
+    alignItems: "center",
+    borderColor: "#E5E7EB",
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: "#F9FAFB",
     height: 48,
     gap: 8,
   },
-  input: { flex: 1, fontSize: 16, color: '#111827' },
-  error: { color: '#DC2626', fontSize: 13, textAlign: 'center' },
+  input: { flex: 1, fontSize: 16, color: "#111827" },
+  error: { color: "#DC2626", fontSize: 13, textAlign: "center" },
   btn: {
     height: 48,
-    backgroundColor: '#10B981',
+    backgroundColor: "#10B981",
     borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   btnDisabled: { opacity: 0.6 },
-  btnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  linksRow: { alignItems: 'center' },
-  linkText: { color: '#2563EB', fontSize: 14, fontWeight: '600' },
-  footerHint: { textAlign: 'center', color: '#9CA3AF', marginTop: 8 },
+  btnInner: { flexDirection: "row", alignItems: "center", gap: 8 },
+  btnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  linksRow: { alignItems: "center" },
+  linkText: { color: "#2563EB", fontSize: 14, fontWeight: "600" },
+  footerHint: { textAlign: "center", color: "#9CA3AF", marginTop: 8 },
 });
